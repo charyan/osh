@@ -39,7 +39,7 @@ ollama_prompt_cmd = """
 Write shell commands for a unix-like shell without comments. Do not write comments. Be concise. Do not write alternative suggestions. Adapt the command to the system information.
 """
 ollama_prompt_explanation = """
-Explain what the shell command does. Be concise. Adapt the command to the system information.
+Explain what the shell command and its parameters do. Be concise.
 """
 
 
