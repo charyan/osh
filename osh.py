@@ -35,8 +35,11 @@ from multiprocessing import Process
 # Ollama
 ollama_server_url = "http://localhost:11434/api/generate"
 ollama_model_name = "mistral"
-ollama_prompt = """
+ollama_prompt_cmd = """
 Write shell commands for a unix-like shell without comments. Do not write comments. Be concise. Do not write alternative suggestions. Adapt the command to the system information.
+"""
+ollama_prompt_explanation = """
+Explain what the shell command does. Be concise. Adapt the command to the system information.
 """
 
 
@@ -216,7 +219,7 @@ def generate_cmd(prompt: str):
 
         payload = {
             "model": ollama_model_name,
-            "prompt": f"{ollama_prompt}\n\n{get_system_info()}\n\nUser request:{prompt}",
+            "prompt": f"{ollama_prompt_cmd}\n\n{get_system_info()}\n\nUser request:{prompt}",
             "system": None,
             "template": None,
             "context": None,
@@ -267,6 +270,68 @@ def generate_cmd(prompt: str):
         exit(1)
 
 
+def generate_explanation(cmd: str):
+    """
+    Generate an explanation a shell command using the Ollama API and prints it.
+
+    Args:
+        cmd (str): The cmd to generate the command.
+
+    MIT License
+    Source: https://github.com/jmorganca/ollama/blob/main/api/client.py
+    """
+
+    spinner = Spinner.get()
+    spinner.color(Colors.YELLOW)
+    spinner.text("Generating explanation")
+    spinner.start()
+
+    try:
+
+        payload = {
+            "model": ollama_model_name,
+            "prompt": f"{ollama_prompt_explanation}\n\n{get_system_info()}\n\nCommand:{cmd}",
+            "system": None,
+            "template": None,
+            "context": None,
+            "options": None,
+            "format": None,
+        }
+
+        payload = {k: v for k, v in payload.items() if v is not None}
+
+        with requests.post(ollama_server_url, json=payload, stream=True) as response:
+            spinner.stop()
+            print("\r", end="")
+            print()
+
+            response.raise_for_status()
+
+            # Variable to hold concatenated response strings if no callback is provided
+            full_response = ""
+
+            # Iterating over the response line by line and displaying the details
+            for line in response.iter_lines():
+                if line:
+                    # Parsing each line (JSON chunk) and extracting the details
+                    chunk = json.loads(line)
+
+                    # If this is not the last chunk, add the "response" field value to full_response and print it
+                    if not chunk.get("done"):
+                        response_piece = chunk.get("response", "")
+                        full_response += response_piece
+                        print(response_piece, end="", flush=True)
+
+            if response == "":
+                print("Error parsing response")
+                exit(-1)
+
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred: {e}")
+        spinner.stop()
+        exit(1)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Get a command for a unix-like shell from a model running with Ollama and execute it")
@@ -294,7 +359,17 @@ if __name__ == "__main__":
     print("\033[91m" + cmd + "\033[0m", end="")
 
     if not yes:
-        print("\033[92m\t Execute ? (y/N)\033[0m ", end="")
+        print("\033[92m\t Execute ? (y/N/[e]xplain)\033[0m ", end="")
 
-    if yes or input().lower() == "y":
+    answer = input().lower()
+
+    if answer == "explain" or answer == "e":
+        generate_explanation(cmd)
+        print()
+
+        print("\033[91m" + cmd + "\033[0m", end="")
+        print("\033[92m\t Execute ? (y/N)\033[0m ", end="")
+        answer = input().lower()
+
+    if yes or answer == "y":
         os.system(cmd)
